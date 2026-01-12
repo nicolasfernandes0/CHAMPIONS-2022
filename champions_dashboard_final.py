@@ -85,27 +85,46 @@ def process_data(raw_data):
             
             matches.append(match_info)
             
-            # Atualizar estatísticas dos times
-            for team_type in ['home', 'away']:
-                team = match['teams'][team_type]
-                if team['name'] not in teams:
-                    teams[team['name']] = {
-                        'games': 0, 'wins': 0, 'draws': 0, 'losses': 0,
-                        'goals_for': 0, 'goals_against': 0
-                    }
-                
-                teams[team['name']]['games'] += 1
-                teams[team['name']]['goals_for'] += match['goals'][team_type]
-                teams[team['name']]['goals_against'] += match['goals']['away' if team_type == 'home' else 'home']
-                
-                if team['winner']:
-                    teams[team['name']]['wins'] += 1
-                elif match['teams']['home']['winner'] is None and match['teams']['away']['winner'] is None:
-                    teams[team['name']]['draws'] += 1
-                else:
-                    teams[team['name']]['losses'] += 1
+            # Atualizar estatísticas dos times - CORREÇÃO AQUI
+            home_team = match['teams']['home']['name']
+            away_team = match['teams']['away']['name']
+            
+            # Inicializar times se necessário
+            if home_team not in teams:
+                teams[home_team] = {
+                    'games': 0, 'wins': 0, 'draws': 0, 'losses': 0,
+                    'goals_for': 0, 'goals_against': 0
+                }
+            
+            if away_team not in teams:
+                teams[away_team] = {
+                    'games': 0, 'wins': 0, 'draws': 0, 'losses': 0,
+                    'goals_for': 0, 'goals_against': 0
+                }
+            
+            # Atualizar estatísticas do time da casa
+            teams[home_team]['games'] += 1
+            teams[home_team]['goals_for'] += match['goals']['home']
+            teams[home_team]['goals_against'] += match['goals']['away']  # CORREÇÃO: gols do visitante
+            
+            # Atualizar estatísticas do time visitante
+            teams[away_team]['games'] += 1
+            teams[away_team]['goals_for'] += match['goals']['away']
+            teams[away_team]['goals_against'] += match['goals']['home']  # CORREÇÃO: gols da casa
+            
+            # Atualizar vitórias/empates/derrotas
+            if match['teams']['home']['winner']:
+                teams[home_team]['wins'] += 1
+                teams[away_team]['losses'] += 1
+            elif match['teams']['away']['winner']:
+                teams[away_team]['wins'] += 1
+                teams[home_team]['losses'] += 1
+            else:  # Empate
+                teams[home_team]['draws'] += 1
+                teams[away_team]['draws'] += 1
                     
-        except Exception:
+        except Exception as e:
+            st.warning(f"Erro ao processar partida: {str(e)}")
             continue
     
     # Converter para DataFrame
@@ -131,6 +150,22 @@ def process_data(raw_data):
         'teams': teams_df
     }
 
+# Função para aplicar estilo à tabela
+def apply_table_style(df, sorted_teams):
+    """Aplica estilo de cores à tabela de classificação"""
+    styled_df = df.copy()
+    
+    # Adicionar cores de fundo com base nos pontos
+    def row_style(row):
+        points = row['Pts']
+        if points >= sorted_teams['points'].quantile(0.75):
+            return ['background-color: #e8f5e9'] * len(row)
+        elif points <= sorted_teams['points'].quantile(0.25):
+            return ['background-color: #ffebee'] * len(row)
+        return [''] * len(row)
+    
+    return styled_df.style.apply(row_style, axis=1)
+
 # Título do Dashboard
 st.title("⚽ UEFA Champions League 2022/23")
 st.markdown("### Dashboard Completo da Temporada")
@@ -151,7 +186,7 @@ if not st.session_state.data_loaded:
             
             if raw_data:
                 processed_data = process_data(raw_data)
-                if processed_data:
+                if processed_data is not None:
                     st.session_state.processed_data = processed_data
                     st.session_state.data_loaded = True
                     st.success("✅ Dados carregados com sucesso!")
@@ -238,7 +273,8 @@ with col1:
     st.metric("Partidas", len(filtered_matches))
 
 with col2:
-    st.metric("Total de Gols", filtered_matches['total_goals'].sum())
+    total_goals = filtered_matches['total_goals'].sum()
+    st.metric("Total de Gols", total_goals)
 
 with col3:
     avg_goals = filtered_matches['total_goals'].mean()
@@ -342,21 +378,8 @@ with tab2:
     display_df.columns = ['Time', 'J', 'V', 'E', 'D', 'GP', 'GC', 'SG', 'Pts', 'Aproveitamento']
     display_df['Aproveitamento'] = display_df['Aproveitamento'].round(1).astype(str) + '%'
     
-    # Aplicar estilo à tabela
-def highlight_rows(row):
-    # Cores mais suaves e modernas
-    high_color = 'background-color: #e8f5e9'  # Verde muito claro
-    low_color = 'background-color: #ffebee'   # Vermelho muito claro
-    default = ''
-    
-    # Condições para destacar
-    if row['Pts'] >= sorted_teams['points'].quantile(0.75):
-        return [high_color] * len(row)
-    elif row['Pts'] <= sorted_teams['points'].quantile(0.25):
-        return [low_color] * len(row)
-    return [default] * len(row)
-    
-    styled_df = display_df.head(20).style.apply(highlight_rows, axis=1)
+    # Aplicar estilo à tabela - CORREÇÃO AQUI
+    styled_df = apply_table_style(display_df, sorted_teams)
     
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
@@ -420,39 +443,42 @@ with tab3:
     # Mostrar partidas
     matches_to_show = st.slider("Número de partidas para mostrar:", 5, 50, 20)
     
-    for idx, match in sorted_matches.head(matches_to_show).iterrows():
-        # Determinar estilo baseado no resultado
-        if match['home_winner']:
-            home_style = "color: green; font-weight: bold"
-            away_style = "color: red"
-        elif match['away_winner']:
-            home_style = "color: red"
-            away_style = "color: green; font-weight: bold"
-        else:
-            home_style = away_style = "color: orange"
-        
-        # Criar container para cada partida
-        with st.container():
-            col1, col2, col3 = st.columns([3, 1, 3])
+    if not sorted_matches.empty:
+        for idx, match in sorted_matches.head(matches_to_show).iterrows():
+            # Determinar estilo baseado no resultado
+            if match['home_winner']:
+                home_style = "color: green; font-weight: bold"
+                away_style = "color: red"
+            elif match['away_winner']:
+                home_style = "color: red"
+                away_style = "color: green; font-weight: bold"
+            else:
+                home_style = away_style = "color: orange"
             
-            with col1:
-                st.markdown(f"<span style='{home_style}'>{match['home_team']}</span>", unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"**{match['home_goals']} - {match['away_goals']}**")
-                st.caption(match['date_str'])
-            
-            with col3:
-                st.markdown(f"<span style='{away_style}'>{match['away_team']}</span>", unsafe_allow_html=True)
-            
-            # Informações adicionais
-            col_info1, col_info2 = st.columns(2)
-            with col_info1:
-                st.caption(f"📋 {match['round']}")
-            with col_info2:
-                st.caption(f"🏟️ {match['venue']}")
-            
-            st.divider()
+            # Criar container para cada partida
+            with st.container():
+                col1, col2, col3 = st.columns([3, 1, 3])
+                
+                with col1:
+                    st.markdown(f"<span style='{home_style}'>{match['home_team']}</span>", unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"**{match['home_goals']} - {match['away_goals']}**")
+                    st.caption(match['date_str'])
+                
+                with col3:
+                    st.markdown(f"<span style='{away_style}'>{match['away_team']}</span>", unsafe_allow_html=True)
+                
+                # Informações adicionais
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.caption(f"📋 {match['round']}")
+                with col_info2:
+                    st.caption(f"🏟️ {match['venue']}")
+                
+                st.divider()
+    else:
+        st.info("Nenhuma partida encontrada com os filtros aplicados")
 
 # Seção de análises adicionais
 st.markdown("---")
@@ -462,7 +488,7 @@ col_anal1, col_anal2 = st.columns(2)
 
 with col_anal1:
     st.subheader("Distribuição por Mês")
-    if 'month' in filtered_matches.columns:
+    if 'month' in filtered_matches.columns and not filtered_matches.empty:
         monthly_stats = filtered_matches.groupby('month').agg({
             'id': 'count',
             'total_goals': 'sum'
@@ -470,13 +496,18 @@ with col_anal1:
         
         monthly_stats = monthly_stats.sort_values('partidas', ascending=False)
         st.dataframe(monthly_stats, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum dado disponível")
 
 with col_anal2:
     st.subheader("Partidas com Mais Gols")
-    high_scoring = filtered_matches.nlargest(5, 'total_goals')[['home_team', 'away_team', 'home_goals', 'away_goals', 'total_goals', 'round']]
-    
-    for idx, match in high_scoring.iterrows():
-        st.write(f"{match['home_team']} {match['home_goals']}-{match['away_goals']} {match['away_team']} ({match['total_goals']} gols) - {match['round']}")
+    if not filtered_matches.empty:
+        high_scoring = filtered_matches.nlargest(5, 'total_goals')[['home_team', 'away_team', 'home_goals', 'away_goals', 'total_goals', 'round']]
+        
+        for idx, match in high_scoring.iterrows():
+            st.write(f"{match['home_team']} {match['home_goals']}-{match['away_goals']} {match['away_team']} ({match['total_goals']} gols) - {match['round']}")
+    else:
+        st.info("Nenhuma partida encontrada")
 
 # Exportar dados
 st.sidebar.markdown("---")
@@ -514,4 +545,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
