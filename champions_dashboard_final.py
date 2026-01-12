@@ -343,12 +343,18 @@ with tab2:
     display_df['Aproveitamento'] = display_df['Aproveitamento'].round(1).astype(str) + '%'
     
     # Aplicar estilo à tabela
-    def highlight_rows(row):
-        if row['Pts'] >= sorted_teams['points'].quantile(0.75):
-            return ['background-color: #d4edda'] * len(row)
-        elif row['Pts'] <= sorted_teams['points'].quantile(0.25):
-            return ['background-color: #f8d7da'] * len(row)
-        return [''] * len(row)
+def highlight_rows(row):
+    # Cores mais suaves e modernas
+    high_color = 'background-color: #e8f5e9'  # Verde muito claro
+    low_color = 'background-color: #ffebee'   # Vermelho muito claro
+    default = ''
+    
+    # Condições para destacar
+    if row['Pts'] >= sorted_teams['points'].quantile(0.75):
+        return [high_color] * len(row)
+    elif row['Pts'] <= sorted_teams['points'].quantile(0.25):
+        return [low_color] * len(row)
+    return [default] * len(row)
     
     styled_df = display_df.head(20).style.apply(highlight_rows, axis=1)
     
@@ -508,3 +514,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
