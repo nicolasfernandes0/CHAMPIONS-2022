@@ -550,21 +550,22 @@ with tab4:  # Nova aba de gráficos
     if metric_choice == "Média de Gols Marcados":
         y_metric = 'avg_goals_for'
         y_title = 'Média Gols Marcados'
-        color_scheme = 'green'
+        # Usando esquema de cores válido do Altair
+        color_scale = alt.Scale(scheme='greens')
     elif metric_choice == "Média de Gols Sofridos":
         y_metric = 'avg_goals_against'
         y_title = 'Média Gols Sofridos'
-        color_scheme = 'blue'
+        color_scale = alt.Scale(scheme='blues')
     else:
         y_metric = 'avg_goal_diff'
         y_title = 'Saldo Médio de Gols'
-        color_scheme = 'purple'
+        color_scale = alt.Scale(scheme='purples')
     
-    # Criar scatter plot
+    # Criar scatter plot - CORREÇÃO APLICADA AQUI
     scatter_chart = alt.Chart(scatter_data).mark_circle(size=100, opacity=0.7).encode(
         x=alt.X('points_per_game:Q', title='Pontos por Jogo'),
         y=alt.Y(f'{y_metric}:Q', title=y_title),
-        color=alt.Color(f'{y_metric}:Q', scale=alt.Scale(scheme=color_scheme), legend=None),
+        color=alt.Color(f'{y_metric}:Q', scale=color_scale, legend=None),
         tooltip=['team', 'points_per_game', y_metric, 'games']
     ).properties(
         height=400,
