@@ -156,11 +156,12 @@ def apply_table_style(df, sorted_teams):
     styled_df = df.copy()
     
     # Adicionar cores de fundo com base nos pontos
-def row_style(row):
-    # Usa a mesma cor de fundo para todas as linhas
-    return ['background-color: #1e1e1e'] * len(row)
-
-return styled_df.style.apply(row_style, axis=1)1)
+    def row_style(row):
+        # Usa a mesma cor de fundo para todas as linhas
+        return ['background-color: #1e1e1e'] * len(row)
+    
+    # Aplica o estilo
+    return styled_df.style.apply(row_style, axis=1)
 
 # Título do Dashboard
 st.title("⚽ UEFA Champions League 2022/23")
@@ -374,7 +375,7 @@ with tab2:
     display_df.columns = ['Time', 'J', 'V', 'E', 'D', 'GP', 'GC', 'SG', 'Pts', 'Aproveitamento']
     display_df['Aproveitamento'] = display_df['Aproveitamento'].round(1).astype(str) + '%'
     
-    # Aplicar estilo à tabela - CORREÇÃO AQUI
+    # Aplicar estilo à tabela - CORREÇÃO APLICADA
     styled_df = apply_table_style(display_df, sorted_teams)
     
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
@@ -541,4 +542,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
