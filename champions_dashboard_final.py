@@ -150,6 +150,19 @@ def process_data(raw_data):
         'teams': teams_df
     }
 
+# Função para calcular médias por time
+def calculate_team_averages(teams_df):
+    """Calcula médias por time"""
+    teams_avg = teams_df.copy()
+    
+    # Calcular médias por jogo
+    teams_avg['avg_goals_for'] = teams_avg['goals_for'] / teams_avg['games']
+    teams_avg['avg_goals_against'] = teams_avg['goals_against'] / teams_avg['games']
+    teams_avg['avg_goal_diff'] = teams_avg['goal_diff'] / teams_avg['games']
+    teams_avg['points_per_game'] = teams_avg['points'] / teams_avg['games']
+    
+    return teams_avg
+
 # Função para aplicar estilo à tabela
 def apply_table_style(df, sorted_teams):
     """Aplica estilo de cores à tabela de classificação"""
@@ -285,7 +298,7 @@ with col4:
 st.markdown("---")
 
 # Abas principais
-tab1, tab2, tab3 = st.tabs(["📈 Estatísticas", "🏆 Times", "⚽ Partidas"])
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Estatísticas", "🏆 Times", "⚽ Partidas", "📊 Gráficos"])
 
 with tab1:
     st.subheader("📈 Estatísticas da Temporada")
@@ -476,6 +489,209 @@ with tab3:
                 st.divider()
     else:
         st.info("Nenhuma partida encontrada com os filtros aplicados")
+
+with tab4:  # Nova aba de gráficos
+    st.subheader("📊 Gráficos por Time")
+    
+    # Calcular médias
+    teams_with_avg = calculate_team_averages(teams_df)
+    
+    # Gráfico 1: Média de gols marcados por time
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🏹 Média de Gols Marcados por Jogo")
+        
+        # Ordenar times por média de gols marcados
+        top_scorers = teams_with_avg.sort_values('avg_goals_for', ascending=False).head(10)
+        
+        # Criar gráfico de barras
+        chart_scoring = alt.Chart(top_scorers).mark_bar(color='#4CAF50').encode(
+            x=alt.X('team:N', title='Time', sort='-y'),
+            y=alt.Y('avg_goals_for:Q', title='Média de Gols por Jogo'),
+            tooltip=['team', alt.Tooltip('avg_goals_for:Q', title='Média', format='.2f')]
+        ).properties(
+            height=400,
+            title="Top 10 Times - Média de Gols Marcados"
+        )
+        
+        st.altair_chart(chart_scoring, use_container_width=True)
+    
+    with col2:
+        st.subheader("🛡️ Média de Gols Sofridos por Jogo")
+        
+        # Ordenar times por melhor defesa (menos gols sofridos)
+        best_defense = teams_with_avg.sort_values('avg_goals_against', ascending=True).head(10)
+        
+        # Criar gráfico de barras
+        chart_defense = alt.Chart(best_defense).mark_bar(color='#2196F3').encode(
+            x=alt.X('team:N', title='Time', sort='y'),
+            y=alt.Y('avg_goals_against:Q', title='Média de Gols Sofridos por Jogo'),
+            tooltip=['team', alt.Tooltip('avg_goals_against:Q', title='Média', format='.2f')]
+        ).properties(
+            height=400,
+            title="Top 10 Times - Melhor Defesa"
+        )
+        
+        st.altair_chart(chart_defense, use_container_width=True)
+    
+    # Gráfico 2: Pontos por jogo vs Média de gols
+    st.subheader("⚡ Pontos por Jogo vs Média de Gols")
+    
+    # Selecionar métrica para comparar
+    metric_choice = st.selectbox(
+        "Comparar Pontos por Jogo com:",
+        ["Média de Gols Marcados", "Média de Gols Sofridos", "Saldo de Gols"]
+    )
+    
+    # Preparar dados para scatter plot
+    scatter_data = teams_with_avg.copy()
+    
+    if metric_choice == "Média de Gols Marcados":
+        y_metric = 'avg_goals_for'
+        y_title = 'Média Gols Marcados'
+        color_scheme = 'green'
+    elif metric_choice == "Média de Gols Sofridos":
+        y_metric = 'avg_goals_against'
+        y_title = 'Média Gols Sofridos'
+        color_scheme = 'blue'
+    else:
+        y_metric = 'avg_goal_diff'
+        y_title = 'Saldo Médio de Gols'
+        color_scheme = 'purple'
+    
+    # Criar scatter plot
+    scatter_chart = alt.Chart(scatter_data).mark_circle(size=100, opacity=0.7).encode(
+        x=alt.X('points_per_game:Q', title='Pontos por Jogo'),
+        y=alt.Y(f'{y_metric}:Q', title=y_title),
+        color=alt.Color(f'{y_metric}:Q', scale=alt.Scale(scheme=color_scheme), legend=None),
+        tooltip=['team', 'points_per_game', y_metric, 'games']
+    ).properties(
+        height=400,
+        title=f"Relação: Pontos por Jogo vs {metric_choice}"
+    )
+    
+    # Adicionar labels para os times
+    text_chart = alt.Chart(scatter_data).mark_text(dy=-10, fontSize=10).encode(
+        x=alt.X('points_per_game:Q'),
+        y=alt.Y(f'{y_metric}:Q'),
+        text='team'
+    )
+    
+    st.altair_chart(scatter_chart + text_chart, use_container_width=True)
+    
+    # Gráfico 3: Comparação completa de médias
+    st.subheader("📈 Comparação Completa de Médias")
+    
+    # Selecionar times para comparar
+    selected_teams = st.multiselect(
+        "Selecione times para comparar:",
+        teams_with_avg['team'].tolist(),
+        default=teams_with_avg['team'].head(5).tolist()
+    )
+    
+    if selected_teams:
+        # Filtrar dados
+        compare_data = teams_with_avg[teams_with_avg['team'].isin(selected_teams)].melt(
+            id_vars=['team'],
+            value_vars=['avg_goals_for', 'avg_goals_against', 'points_per_game'],
+            var_name='metric',
+            value_name='value'
+        )
+        
+        # Mapear nomes das métricas
+        metric_names = {
+            'avg_goals_for': 'Gols Marcados/Jogo',
+            'avg_goals_against': 'Gols Sofridos/Jogo',
+            'points_per_game': 'Pontos/Jogo'
+        }
+        
+        compare_data['metric'] = compare_data['metric'].map(metric_names)
+        
+        # Criar gráfico de barras agrupadas
+        compare_chart = alt.Chart(compare_data).mark_bar().encode(
+            x=alt.X('team:N', title='Time'),
+            y=alt.Y('value:Q', title='Valor'),
+            color=alt.Color('metric:N', title='Métrica'),
+            column=alt.Column('metric:N', title='Métrica'),
+            tooltip=['team', 'metric', alt.Tooltip('value:Q', format='.2f')]
+        ).properties(
+            width=150,
+            height=300
+        )
+        
+        st.altair_chart(compare_chart, use_container_width=True)
+    
+    # Gráfico 4: Heatmap de performance
+    st.subheader("🔥 Heatmap de Performance")
+    
+    # Preparar dados para heatmap
+    heatmap_data = teams_with_avg.sort_values('points_per_game', ascending=False).head(15).copy()
+    
+    # Normalizar dados para o heatmap
+    metrics_for_heatmap = ['avg_goals_for', 'avg_goals_against', 'goal_diff', 'points_per_game', 'win_rate']
+    heatmap_data_normalized = heatmap_data.copy()
+    
+    for metric in metrics_for_heatmap:
+        heatmap_data_normalized[f'{metric}_norm'] = (
+            (heatmap_data[metric] - heatmap_data[metric].min()) / 
+            (heatmap_data[metric].max() - heatmap_data[metric].min())
+        )
+    
+    # Transformar para formato longo
+    heatmap_long = heatmap_data_normalized.melt(
+        id_vars=['team'],
+        value_vars=[f'{m}_norm' for m in metrics_for_heatmap],
+        var_name='metric',
+        value_name='normalized_value'
+    )
+    
+    # Mapear nomes das métricas
+    metric_labels = {
+        'avg_goals_for_norm': 'Gols Marcados',
+        'avg_goals_against_norm': 'Gols Sofridos',
+        'goal_diff_norm': 'Saldo de Gols',
+        'points_per_game_norm': 'Pontos/Jogo',
+        'win_rate_norm': '% Vitórias'
+    }
+    
+    heatmap_long['metric'] = heatmap_long['metric'].map(metric_labels)
+    
+    # Criar heatmap
+    heatmap = alt.Chart(heatmap_long).mark_rect().encode(
+        x=alt.X('metric:N', title='Métrica', axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y('team:N', title='Time', sort='-x'),
+        color=alt.Color('normalized_value:Q', 
+                       scale=alt.Scale(scheme='redyellowgreen'),
+                       title='Performance'),
+        tooltip=['team', 'metric', alt.Tooltip('normalized_value:Q', title='Score', format='.2f')]
+    ).properties(
+        height=400,
+        title="Heatmap de Performance - Top 15 Times"
+    )
+    
+    st.altair_chart(heatmap, use_container_width=True)
+    
+    # Tabela de médias
+    st.subheader("📋 Tabela Completa de Médias")
+    
+    # Criar tabela com todas as médias
+    avg_display = teams_with_avg[['team', 'games', 'avg_goals_for', 'avg_goals_against', 
+                                 'avg_goal_diff', 'points_per_game', 'win_rate']].copy()
+    
+    avg_display.columns = ['Time', 'Jogos', 'Gols/Jogo', 'Sofridos/Jogo', 
+                          'Saldo/Jogo', 'Pontos/Jogo', '% Vitórias']
+    
+    # Formatando números
+    for col in ['Gols/Jogo', 'Sofridos/Jogo', 'Saldo/Jogo', 'Pontos/Jogo']:
+        avg_display[col] = avg_display[col].round(2)
+    
+    avg_display['% Vitórias'] = avg_display['% Vitórias'].round(1)
+    
+    # Ordenar
+    avg_display = avg_display.sort_values('Pontos/Jogo', ascending=False)
+    
+    st.dataframe(avg_display, use_container_width=True, hide_index=True)
 
 # Seção de análises adicionais
 st.markdown("---")
